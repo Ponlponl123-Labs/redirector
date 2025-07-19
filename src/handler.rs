@@ -1,3 +1,4 @@
+use crate::utils::request::{HttpRequest, Request, Analyze};
 use crate::utils::health_check::{get_service_config, check_service_health};
 use std::{
     io::{prelude::*, BufReader}, net::{TcpStream}
@@ -26,11 +27,15 @@ impl Handler {
             }
         };
         
-        let _http_request: Vec<_> = lines
+        let raw_http_request: HttpRequest = lines
             .by_ref()
             .filter_map(|result: Result<String, std::io::Error>| result.ok())
             .take_while(|line: &String| !line.is_empty())
             .collect();
+        let request: Request = Request {
+            http: raw_http_request
+        };
+        Analyze::send_to_db(request);
         
         let (status_line, content) = if request_line.starts_with("GET /") && (request_line.ends_with(" HTTP/1.1") || request_line.ends_with(" HTTP/2.0")) {
             let path: &str = request_line
@@ -52,12 +57,12 @@ impl Handler {
                                 ("HTTP/1.1 503 Service Unavailable", format!("Service {} is not responding", service_name))
                             }
                         },
-                        None => ("HTTP/1.1 404 NOT FOUND", format!("Service {} not valid", service_name)),
+                        None => ("HTTP/1.1 404 NOT FOUND", "NOT FOUND".to_string()),
                     }
                 }
             }
         } else {
-            ("HTTP/1.1 400 BAD REQUEST", "Invalid request".to_string())
+            ("HTTP/1.1 400 BAD REQUEST", "BAD REQUEST".to_string())
         };
 
         let length: usize = content.len();
