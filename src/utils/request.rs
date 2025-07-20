@@ -35,7 +35,7 @@ impl Redirector for Request {
                 }
 
                 let http_string = self.http.join(" "); // Convert Vec<String> to a single String
-                let result: Vec<mysql_async::Row> = db_conn.unwrap().exec("SELECT uri, url FROM requests WHERE string = ? LIMIT 1", (http_string,)).await.unwrap();
+                let result: Vec<mysql_async::Row> = db_conn.unwrap().exec("SELECT uri, url FROM endpoint WHERE string = ? LIMIT 1", (http_string,)).await.unwrap();
                 println!("DB Query result: {:?}", result);
                 if result.len() > 0 {
                     let uri: String = format!("{:?}", &result[0]);
@@ -52,7 +52,7 @@ impl Redirector for Request {
                 }
 
                 let http_string = self.http.join(" "); // Convert Vec<String> to a single String
-                let result: Vec<mysql_async::Row> = db_conn.unwrap().exec("SELECT uri, url FROM requests WHERE string = ? LIMIT 1", (http_string,)).await.unwrap();
+                let result: Vec<mysql_async::Row> = db_conn.unwrap().exec("SELECT uri, url FROM endpoint WHERE string = ? LIMIT 1", (http_string,)).await.unwrap();
                 println!("DB Query result: {:?}", result);
                 if result.len() > 0 {
                     let uri: String = format!("{:?}", &result[0]);
