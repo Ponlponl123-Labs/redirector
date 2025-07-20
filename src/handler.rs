@@ -32,8 +32,26 @@ impl Handler {
             .filter_map(|result: Result<String, std::io::Error>| result.ok())
             .take_while(|line: &String| !line.is_empty())
             .collect();
+        let referer: Option<String> = raw_http_request.iter()
+            .find(|line: &&String| line.to_lowercase().starts_with("referer:"))
+            .and_then(|line: &String| line.splitn(2, ':').nth(1))
+            .map(|s| s.trim().to_string());
+        let user_agent: Option<String> = raw_http_request.iter()
+            .find(|line: &&String| line.to_lowercase().starts_with("user-agent:"))
+            .and_then(|line: &String| line.splitn(2, ':').nth(1))
+            .map(|s: &str| s.trim().to_string());
+        let fallback_ip: Option<String> = stream.peer_addr().ok().map(|addr: std::net::SocketAddr| addr.ip().to_string());
+        let real_ip: Option<String> = raw_http_request.iter()
+            .find(|line: &&String| line.to_lowercase().starts_with("x-forwarded-for:"))
+            .and_then(|line: &String| line.splitn(2, ':').nth(1))
+            .map(|s| s.trim().to_string())
+            .or(fallback_ip);
+
         let request: Request = Request {
-            http: raw_http_request
+            http: raw_http_request,
+            ip: real_ip,
+            referer,
+            user_agent,
         };
         
         let (status_line, content) = if request_line.starts_with("GET /") && (request_line.ends_with(" HTTP/1.1") || request_line.ends_with(" HTTP/2.0")) {
