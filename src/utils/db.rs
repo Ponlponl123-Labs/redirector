@@ -1,6 +1,7 @@
 use std::env;
 use mysql_async::{Pool, Opts};
 use tokio::sync::OnceCell;
+use urlencoding::encode;
 
 static DB_POOL: OnceCell<Pool> = OnceCell::const_new();
 
@@ -11,9 +12,19 @@ async fn create_pool() -> Pool {
     let port = env::var("DB_PORT").unwrap_or_else(|_| "3306".to_string());
     let name = env::var("DB_NAME").unwrap_or_else(|_| "database".to_string());
 
-    let url = format!("mysql://{}:{}@{}:{}/{}", user, pass, host, port, name);
-    let opts = Opts::from_url(&url).expect("Invalid DB URL");
+    let port = port.trim();
+    // println!("Port after trim: '{}'", port);
 
+    let port_num: u16 = port.parse().expect("DB_PORT must be a valid port number");
+
+    let user_enc = encode(&user);
+    let pass_enc = encode(&pass);
+
+    let url = format!("mysql://{}:{}@{}:{}/{}", user_enc, pass_enc, host, port_num, name);
+    // println!("DB URL: {}", url);
+
+    let opts = Opts::from_url(&url).expect("Invalid DB URL");
+    
     println!("Connecting to MySQL at {}:{}...", host, port);
     let pool = Pool::new(opts);
 
@@ -22,6 +33,7 @@ async fn create_pool() -> Pool {
         Ok(conn) => {
             // You can drop the conn, it goes back to the pool
             drop(conn);
+            println!("Connected to MySQL!");
         }
         Err(e) => {
             eprintln!("Failed to connect to DB: {e}");

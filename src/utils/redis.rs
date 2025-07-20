@@ -10,6 +10,7 @@ pub fn get_connection() -> RedisResult<Connection> {
     // Try read lock first
     if let Ok(client) = REDIS_CLIENT.read() {
         if let Ok(conn) = client.get_connection() {
+            println!("Using existing Redis connection.");
             return Ok(conn);
         }
     }
@@ -20,6 +21,7 @@ pub fn get_connection() -> RedisResult<Connection> {
 
     if let Ok(mut client) = REDIS_CLIENT.write() {
         *client = new_client;
+        println!("Global client replaced.");
         return client.get_connection();
     }
 

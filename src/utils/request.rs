@@ -27,47 +27,39 @@ impl Redirector for Request {
             let req = Request { http: http_clone, ip: Some(ip_clone), referer, user_agent };
             req.send_to_db(&id_clone).await;
         });
-        let redis_client: Result<::redis::Connection, ::redis::RedisError> = redis::get_connection();
-        match redis_client {
+        let redis_conn: Result<::redis::Connection, ::redis::RedisError> = redis::get_connection();
+        match redis_conn {
             Ok(mut conn) => {
-                let uri: String = conn.get(format!("ponlponl123:apps:redirector:url:{}", id)).unwrap();
-                if !uri.is_empty() {
-                    return uri;
+                let uri: Option<String> = conn.get(format!("ponlponl123:apps:redirector:url:{}", id)).unwrap();
+                if !uri.is_none() && !uri.clone().unwrap().is_empty() {
+                    return uri.unwrap();
                 }
-
-                let db = db::get_pool().await;
-                let db_conn = db.get_conn().await;
-                if !db_conn.is_ok() {
-                    return "".to_string();
-                }
-
-                let http_string = self.http.join(" "); // Convert Vec<String> to a single String
-                let result: Vec<mysql_async::Row> = db_conn.unwrap().exec("SELECT uri FROM endpoint WHERE url = ? AND disabled = 0 LIMIT 1", (http_string,)).await.unwrap();
-                println!("DB Query result: {:?}", result);
-                if result.len() > 0 {
-                    let uri: String = format!("{:?}", &result[0]);
-                    let _: () = conn.set_ex(format!("ponlponl123:apps:redirector:url:{}", id), uri.clone(), 60 * 60 * 3).unwrap();
-                    return uri;
-                }
-                return "".to_string();
             },
             Err(_) => {
-                let db = db::get_pool().await;
-                let db_conn = db.get_conn().await;
-                if !db_conn.is_ok() {
-                    return "".to_string();
-                }
-
-                let http_string = self.http.join(" "); // Convert Vec<String> to a single String
-                let result: Vec<mysql_async::Row> = db_conn.unwrap().exec("SELECT uri FROM endpoint WHERE url = ? AND disabled = 0 LIMIT 1", (http_string,)).await.unwrap();
-                println!("DB Query result: {:?}", result);
-                if result.len() > 0 {
-                    let uri: String = format!("{:?}", &result[0]);
-                    return uri;
-                }
-                return "".to_string();
+                println!("Cannot connect to Redis, fetch directly from DB");
             }
         }
+        
+        let db = db::get_pool().await;
+        let db_conn = db.get_conn().await;
+        if !db_conn.is_ok() {
+            return "".to_string();
+        }
+
+        let result: Vec<mysql_async::Row> = db_conn.unwrap().exec("SELECT uri, `url`, disabled FROM endpoint WHERE `url` = ? AND disabled = 0 LIMIT 1", (id,)).await.unwrap();
+        // println!("DB Query result: {:?}", result);
+        if let Some(row) = result.into_iter().next() {
+            let uri: String = row.get("uri").unwrap_or_default();
+            if let Ok(mut conn) = redis::get_connection() {
+                let _: () = conn
+                    .set_ex(format!("ponlponl123:apps:redirector:url:{}", id), uri.clone(), 60 * 60 * 3)
+                    .unwrap();
+            } else {
+                println!("DB fetched but cannot store to Redis, ignored.");
+            }
+            return uri;
+        }
+        return "".to_string();
     }
 }
 
@@ -82,17 +74,20 @@ impl Analyze for Request {
             return;
         }
 
-        let db = db::get_pool().await;
-        let mut conn = db.get_conn().await.unwrap();
+        let db: &'static mysql_async::Pool = db::get_pool().await;
+        let mut conn: mysql_async::Conn = db.get_conn().await.unwrap();
 
-        let http_string = self.http.join(" "); // Convert Vec<String> to a single String
-        let _ = conn.exec_drop("INSERT INTO requests (ip, string, referer, user_agent, to) VALUES (?, ?, ?, ?, ?)",
+        let http_string: String = self.http.join(" "); // Convert Vec<String> to a single String
+        let result: Result<(), mysql_async::Error> = conn.exec_drop("INSERT INTO requests (`ip`, `string`, `referer`, `user_agent`, `to`) VALUES (?, ?, ?, ?, ?)",
             (&self.ip, http_string, &self.referer, &self.user_agent, id))
-            .await
-            .unwrap();
+            .await;
+
+        if let Err(_e) = result {
+            // eprintln!("Failed to insert request: {e}");
+            return;
+        }
 
         let _ = conn.exec_drop("UPDATE endpoint SET used = used + 1 WHERE url = ?", (id,))
-            .await
-            .unwrap();
+            .await;
     }
 }
