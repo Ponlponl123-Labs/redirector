@@ -4,10 +4,17 @@ services:
     ports:
       - 8080:8080
     environment:
+      - PORT=8080
+      - SINGLE_THREADED=false
     # MariaDB
       - DB_HOST=127.0.0.1
       - DB_PORT=3306
       - DB_USER=user
       - DB_PASS=pass
       - DB_NAME=mydb
+      
+      - REDIS_HOST=127.0.0.1
+      - REDIS_PORT=6379
+      - REDIS_PASS=
+      - REDIS_DB=0
     restart: always
