@@ -75,7 +75,8 @@ impl Handler {
                 .unwrap_or("");
 
             match path.is_empty() {
-                true => ("HTTP/1.1 200 OK".to_string(), "Hello World!".to_string()),
+                // true => ("HTTP/1.1 200 OK".to_string(), "Hello World!".to_string()),
+                true => ("HTTP/1.1 301 Permanently Redirect\r\nLocation: https://ponlponl123.com/".to_string(), "Redirecting to https://ponlponl123.com...".to_string()),
                 false => {
                     uri = request.get_uri(path).await;
                     url = path.to_string();

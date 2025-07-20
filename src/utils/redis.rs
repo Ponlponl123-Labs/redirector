@@ -1,6 +1,7 @@
 use std::{env, sync::LazyLock};
 use std::sync::RwLock;
 use redis::{Client, Connection, RedisResult};
+use urlencoding::encode;
 
 static REDIS_CLIENT: LazyLock<RwLock<Client>> = LazyLock::new(|| {
     RwLock::new(create_new_connection())
@@ -41,7 +42,8 @@ fn create_new_connection() -> Client {
     let url = if pass.is_empty() {
         format!("redis://{}:{}/{}", host, port, db)
     } else {
-        format!("redis://:{}@{}:{}/{}", pass, host, port, db)
+        let pass_enc = encode(&pass);
+        format!("redis://:{}@{}:{}/{}", pass_enc, host, port, db)
     };
 
     println!("Connecting to Redis at {}:{}...", host, port);
