@@ -4,7 +4,7 @@ use tokio::sync::OnceCell;
 
 static DB_POOL: OnceCell<Pool> = OnceCell::const_new();
 
-async fn init_pool() -> Pool {
+async fn create_pool() -> Pool {
     let host = env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
     let user = env::var("DB_USER").unwrap_or_else(|_| "username".to_string());
     let pass = env::var("DB_PASS").unwrap_or_else(|_| "password".to_string());
@@ -15,10 +15,28 @@ async fn init_pool() -> Pool {
     let opts = Opts::from_url(&url).expect("Invalid DB URL");
 
     println!("Connecting to MySQL at {}:{}...", host, port);
-    Pool::new(opts)
+    let pool = Pool::new(opts);
+
+    // Do a test connection here
+    match pool.get_conn().await {
+        Ok(conn) => {
+            // You can drop the conn, it goes back to the pool
+            drop(conn);
+        }
+        Err(e) => {
+            eprintln!("Failed to connect to DB: {e}");
+            std::process::exit(1);
+        }
+    }
+
+    pool
 }
 
 /// Public function to get global pool
 pub async fn get_pool() -> &'static Pool {
-    DB_POOL.get_or_init(init_pool).await
+    DB_POOL.get_or_init(create_pool).await
+}
+
+pub async fn is_ok() -> bool {
+    get_pool().await.get_conn().await.is_ok()
 }

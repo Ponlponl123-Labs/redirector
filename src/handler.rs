@@ -1,5 +1,5 @@
-use crate::utils::request::{HttpRequest, Request, Analyze};
-use crate::utils::health_check::{get_service_config, check_service_health};
+use crate::utils::db;
+use crate::utils::request::{HttpRequest, Redirector, Request};
 use std::{
     io::{prelude::*, BufReader}, net::{TcpStream}
 };
@@ -7,7 +7,7 @@ use std::{
 pub struct Handler;
 
 impl Handler {
-    pub fn handle_connection(mut stream: TcpStream) {
+    pub async fn handle_connection(mut stream: TcpStream) {
         let buf_reader: BufReader<&TcpStream> = BufReader::new(&stream);
         let mut lines: std::io::Lines<BufReader<&TcpStream>> = buf_reader.lines();
         
@@ -35,7 +35,6 @@ impl Handler {
         let request: Request = Request {
             http: raw_http_request
         };
-        Analyze::send_to_db(request);
         
         let (status_line, content) = if request_line.starts_with("GET /") && (request_line.ends_with(" HTTP/1.1") || request_line.ends_with(" HTTP/2.0")) {
             let path: &str = request_line
@@ -46,18 +45,21 @@ impl Handler {
                 .strip_prefix('/')
                 .unwrap_or("");
             
-            match path {
-                "" => ("HTTP/1.1 200 OK", "Hello World!".to_string()),
-                service_name => {
-                    match get_service_config(service_name) {
-                        Some(config) => {
-                            if check_service_health(&config) {
-                                ("HTTP/1.1 200 OK", format!("Service {} is healthy", service_name))
+            match path.is_empty() {
+                true => ("HTTP/1.1 200 OK", "Hello World!".to_string()),
+                false => {
+                    match db::is_ok().await {
+                        true => {
+                            let uri: String = request.get_uri(path).await;
+                            if !uri.is_empty() {
+                                ("HTTP/1.1 302 OK", format!("Redirecting to {}...", uri))
                             } else {
-                                ("HTTP/1.1 503 Service Unavailable", format!("Service {} is not responding", service_name))
+                                ("HTTP/1.1 404 NOT FOUND", format!("Endpoint [{}] not valid.", path))
                             }
-                        },
-                        None => ("HTTP/1.1 404 NOT FOUND", "NOT FOUND".to_string()),
+                        }
+                        false => {
+                            ("HTTP/1.1 503 Service Unavaliable", "Service Unavailable".to_string())
+                        }
                     }
                 }
             }
